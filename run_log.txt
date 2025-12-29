@@ -1,0 +1,56 @@
+nohup: ignoring input
+
+---------------------------------------------
+🚀 moeDeepT.2_001
+   batch_size=16, lr=0.0004, weight_decay=0.0003
+   parameters=5,125,289
+Epoch 001: train=0.09036  val=0.06294
+Epoch 002: train=0.08191  val=0.07305
+Epoch 003: train=0.07442  val=0.06641
+Epoch 004: train=0.07154  val=0.06704
+Epoch 005: train=0.07036  val=0.06443
+Epoch 006: train=0.06747  val=0.06247
+Epoch 007: train=0.06710  val=0.06310
+Epoch 008: train=0.06583  val=0.06285
+Epoch 009: train=0.06559  val=0.06619
+Epoch 010: train=0.06501  val=0.06254
+Epoch 011: train=0.06369  val=0.06258
+Epoch 012: train=0.06340  val=0.06133
+Epoch 013: train=0.06000  val=0.05597
+Epoch 014: train=0.05690  val=0.05755
+Epoch 015: train=0.05549  val=0.05237
+Epoch 016: train=0.05524  val=0.05373
+Epoch 017: train=0.05409  val=0.05320
+Epoch 018: train=0.05373  val=0.05208
+Epoch 019: train=0.05311  val=0.05347
+Epoch 020: train=0.05274  val=0.05274
+Epoch 021: train=0.05306  val=0.05296
+Epoch 022: train=0.05303  val=0.05136
+Epoch 023: train=0.05265  val=0.05193
+Epoch 024: train=0.05298  val=0.05215
+Epoch 025: train=0.05266  val=0.05139
+Epoch 026: train=0.05177  val=0.05268
+Epoch 027: train=0.05253  val=0.05246
+Epoch 028: train=0.05221  val=0.05161
+Epoch 029: train=0.05132  val=0.05196
+Epoch 030: train=0.05218  val=0.05163
+Epoch 031: train=0.05229  val=0.05320
+Epoch 032: train=0.05183  val=0.05256
+Epoch 033: train=0.05181  val=0.05148
+Epoch 034: train=0.05125  val=0.05156
+Epoch 035: train=0.05188  val=0.05173
+Epoch 036: train=0.05157  val=0.05149
+Epoch 037: train=0.05181  val=0.05188
+Epoch 038: train=0.05164  val=0.05235
+Epoch 039: train=0.05138  val=0.05162
+Epoch 040: train=0.05139  val=0.05165
+Epoch 041: train=0.05151  val=0.05445
+Epoch 042: train=0.05133  val=0.05369
+Epoch 043: train=0.05206  val=0.05226
+Epoch 044: train=0.05162  val=0.05212
+Epoch 045: train=0.05205  val=0.05269
+Epoch 046: train=0.05201  val=0.05114
+Epoch 047: train=0.05160  val=0.05181
+Epoch 048: train=0.05163  val=0.05139
+Epoch 049: train=0.05191  val=0.05201
+Epoch 050: train=0.05134  val=0.05226

@@ -114,7 +114,7 @@ def run_experiment(model_cls, run_prefix, hypers):
 
                 best_val, hist, trained = train_one(
                     model, train_loader, val_loader, device,
-                    lr=lr, wd=wd, max_epochs=60, patience=6
+                    lr=lr, wd=wd
                 )
 
                 pd.DataFrame(hist).to_csv(f"{run_dir}/history.csv", index=False)
