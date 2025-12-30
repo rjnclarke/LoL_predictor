@@ -214,3 +214,8 @@ data
 data/
 cache/
 cache
+weights/
+weights
+runs/
+runs
+run_log
