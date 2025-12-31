@@ -2,20 +2,18 @@
 viz/nn_infer.py
 ===============
 
-Neural‑net inference utilities used within the visualization layer.
-
-Builds the 13‑feature player/team/match tensors directly from the
-current (live) database structure:
-    players + player_match_stats tables
-
-This keeps inference self‑contained and aligned with the trained model.
+Provides utilities to build model input tensors from the
+live visualization database and run predictions using the
+MatchAttnMoEModel stored in weights/moeT_003.pt.
 """
 
 import json, torch, pandas as pd, numpy as np
 from core.entities import Team, Match
+from ml.models.moe_transformer import MatchAttnMoEModel
+
 
 # ----------------------------------------------------------- #
-# Safe conversion helpers
+# Safe number helper
 # ----------------------------------------------------------- #
 def safe_num(x):
     try:
@@ -27,15 +25,14 @@ def safe_num(x):
 
 
 # ----------------------------------------------------------- #
-# Feature construction
+# Feature builders
 # ----------------------------------------------------------- #
 def build_player_vector(conn, puuid):
     """
-    Construct a 13‑feature vector for one player directly from live DB.
-    Pulls static info from `players` table and averages dynamic stats
-    over the last 10 entries in `player_match_stats`.
+    Construct the 13‑feature numeric vector for one player
+    directly from the live DB.
     """
-    # ---- Static fields ----
+    # ---- Static ----
     srow = conn.execute(
         "SELECT tier FROM players WHERE puuid=?", (puuid,)
     ).fetchone()
@@ -47,14 +44,14 @@ def build_player_vector(conn, puuid):
     }
     tier_norm = safe_num(tier_norm_map.get(tier, 0.3))
 
-    # ---- Dynamic stats ----
+    # ---- Dynamic averages ----
     cur = conn.execute("""
         SELECT stats_json FROM player_match_stats
         WHERE puuid=? ORDER BY timestamp DESC LIMIT 10
     """, (puuid,))
     rows = cur.fetchall()
     if not rows:
-        return [0.0]*13  # fallback if no records
+        return [0.0] * 13
 
     stats = [json.loads(j[0]) for j in rows]
     df = pd.DataFrame(stats)
@@ -63,75 +60,82 @@ def build_player_vector(conn, puuid):
     deaths  = safe_num(df["deaths"].mean())
     assists = safe_num(df["assists"].mean())
     gold_pm = safe_num(df["gold"].mean())
-    cs_pm   = safe_num((df["kills"] + df["assists"]).mean()/10)
+    cs_pm   = safe_num(((df["kills"] + df["assists"]) / 10).mean())
     vision  = safe_num(df["vision"].mean())
     damage  = safe_num(df["damage"].mean())
-    win_r   = 0.5  # placeholder until win tracking added
+    win_r   = 0.5  # placeholder until stored
 
     feats = [
-        tier_norm,       # 1
-        0.0,             # rank_strength (not in visual DB)
-        0.0,             # summoner_level
-        0.0,             # mastery_score
-        0.0,             # challenge_points
+        tier_norm, 0.0, 0.0, 0.0, 0.0,
         kills, deaths, assists,
         gold_pm, cs_pm,
-        vision, damage, win_r
+        vision, damage, win_r,
     ]
     return feats
 
 
 def build_team_tensor(match_base, team: Team):
-    """Return [5,13] tensor for one team based on current DB."""
+    """Return [5,13] tensor for the given team."""
     conn = match_base.db.conn
     rows = [build_player_vector(conn, p.puuid) for p in team]
     return torch.tensor(rows, dtype=torch.float32)
 
 
 def build_match_tensor(match_base, match: Match):
-    """Concatenate both teams → [10,13] tensor."""
+    """Concatenate the two team tensors → [10,13] match tensor."""
     blue_tensor = build_team_tensor(match_base, match.blue)
     red_tensor  = build_team_tensor(match_base, match.red)
     return torch.cat([blue_tensor, red_tensor], dim=0)
 
 
 # ----------------------------------------------------------- #
-# Model loading & prediction
+# Model loading + inference
 # ----------------------------------------------------------- #
-def load_model(weights_path="weights/name_of_model.pt", device=None):
-    """Load trained PyTorch model from .pt file."""
+def load_model(weights_path="weights/moeT_003.pt", device=None):
+    """
+    Load MatchAttnMoEModel weights (supports state_dict or full model).
+    """
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.load(weights_path, map_location=device)
-    model.eval()
+    model = MatchAttnMoEModel()
+    checkpoint = torch.load(weights_path, map_location=device)
+
+    # handle both full model and pure state_dict
+    if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
+        model.load_state_dict(checkpoint["state_dict"])
+    elif isinstance(checkpoint, dict):
+        model.load_state_dict(checkpoint)
+    else:
+        model = checkpoint
+
+    model.to(device).eval()
     return model, device
 
 
 @torch.no_grad()
 def predict_match_outcome(match_base, match: Match,
-                          model_path="weights/name_of_model.pt"):
+                          model_path="weights/moeT_003.pt"):
     """
-    Returns model prediction (probability or score depending on the model).
+    Build input tensor from Match and return the model prediction score.
     """
     X = build_match_tensor(match_base, match).unsqueeze(0)  # [1,10,13]
     model, device = load_model(model_path)
     X = X.to(device)
     y_pred = model(X)
-    return y_pred.squeeze().cpu().item()
+    return float(y_pred.squeeze().cpu().item())
 
 
 # ----------------------------------------------------------- #
-# Stand‑alone smoke test
+# Smoke test
 # ----------------------------------------------------------- #
 if __name__ == "__main__":
     from crawler.match_base import MatchBase
     from core.entities import Player, Team, Match
 
-    mb = MatchBase(live_path="data/match_base_1/live.db")
-    # simple test with first 10 players
+    mb = MatchBase(live_path="data/match_base/live.db")
     puuids = [r[0] for r in mb.db.conn.execute("SELECT puuid FROM players LIMIT 10")]
-    blue_team = Team([Player(p) for p in puuids[:5]])
-    red_team  = Team([Player(p) for p in puuids[5:10]])
-    match = Match(blue_team, red_team)
+    blue = Team([Player(p) for p in puuids[:5]])
+    red  = Team([Player(p) for p in puuids[5:10]])
+    match = Match(blue, red)
 
     pred = predict_match_outcome(mb, match)
-    print(f"Predicted outcome score: {pred:.4f}")
+    print(f"Predicted match outcome score: {pred:.4f}")

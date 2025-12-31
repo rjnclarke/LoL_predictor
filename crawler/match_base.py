@@ -19,6 +19,7 @@ L – Stable API contracts with RiotAPIClient and DatabaseHandler.
 import asyncio, aiohttp, shutil, os, time, json
 from .riot_api_client import RiotAPIClient
 from .db_handler import DatabaseHandler
+from .data_collector import compute_label, order_puuids_by_role
 
 
 class MatchBase:
@@ -43,6 +44,22 @@ class MatchBase:
     def log(self, msg: str):
         """Timestamped log utility for build output."""
         print(f"[{time.strftime('%H:%M:%S')}] {msg}")
+
+    def _extract_roster(self, info, metadata):
+        """Return ordered 10‑player roster for a match."""
+        participants = info.get("participants", [])
+        ordered = order_puuids_by_role(participants)
+        if len(ordered) == 10:
+            return ordered
+
+        blue = [p.get("puuid") for p in participants if p.get("teamId") == 100]
+        red = [p.get("puuid") for p in participants if p.get("teamId") == 200]
+        combined = [p for p in blue + red if p]
+        if len(combined) == 10:
+            return combined
+
+        meta = metadata.get("participants", []) if isinstance(metadata, dict) else []
+        return meta if len(meta) == 10 else []
 
     def compute_level_bounds(self):
         """Compute global min/max level for visualization normalization."""
@@ -134,7 +151,7 @@ class MatchBase:
 
             new_count = 0
             for mid in ids:
-                # Skip if already stored
+                # Skip if already stored for this player
                 cur = self.db.conn.execute(
                     "SELECT 1 FROM player_match_stats WHERE puuid=? AND match_id=?",
                     (puuid, mid),
@@ -146,27 +163,47 @@ class MatchBase:
                 if not match or "info" not in match:
                     continue
                 info = match["info"]
+                metadata = match.get("metadata", {})
 
-                # Extract stats for this specific player
-                for p in info.get("participants", []):
-                    if p["puuid"] == puuid:
-                        stat = {
-                            "kills": p.get("kills", 0),
-                            "deaths": p.get("deaths", 0),
-                            "assists": p.get("assists", 0),
-                            "gold": p.get("goldEarned", 0),
-                            "damage": p.get("totalDamageDealtToChampions", 0),
-                            "vision": p.get("visionScore", 0),
-                        }
-                        self.db.insert_player_match(
-                            puuid,
-                            mid,
-                            info.get("gameStartTimestamp", time.time()),
-                            p.get("teamPosition"),
-                            stat,
-                        )
-                        new_count += 1
-                        break
+                roster = self._extract_roster(info, metadata)
+                if len(roster) == 10:
+                    try:
+                        label = compute_label(info)
+                    except Exception:
+                        label = None
+                    self.db.insert_match(mid, info, roster, label)
+
+                participants = info.get("participants", [])
+                target_inserted = False
+                match_ts = info.get("gameStartTimestamp", time.time())
+
+                for part in participants:
+                    part_puuid = part.get("puuid")
+                    if not part_puuid:
+                        continue
+
+                    stats_payload = {
+                        "kills": part.get("kills", 0),
+                        "deaths": part.get("deaths", 0),
+                        "assists": part.get("assists", 0),
+                        "gold": part.get("goldEarned", 0),
+                        "damage": part.get("totalDamageDealtToChampions", 0),
+                        "vision": part.get("visionScore", 0),
+                    }
+
+                    self.db.insert_player_match(
+                        part_puuid,
+                        mid,
+                        match_ts,
+                        part.get("teamPosition"),
+                        stats_payload,
+                    )
+
+                    if part_puuid == puuid:
+                        target_inserted = True
+
+                if target_inserted:
+                    new_count += 1
 
             # Keep only the last 10 matches
             self.db.delete_old_matches(puuid, keep=10)

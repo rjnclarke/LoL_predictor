@@ -10,6 +10,14 @@ from .base_viz import ABCViz
 from core.entities import Match, Team
 import json, pandas as pd, numpy as np, matplotlib.pyplot as plt
 
+ROLE_COLORS = {
+    "TOP": "#5470C6",
+    "JUNGLE": "#91CC75",
+    "MIDDLE": "#EE6666",
+    "BOTTOM": "#FAC858",
+    "UTILITY": "#73C0DE",
+}
+
 class GoldContribution(ABCViz):
     """Team‑normalized gold‑share bar chart."""
 
@@ -34,16 +42,43 @@ class GoldContribution(ABCViz):
         return pd.DataFrame({"blue":blue,"red":red},index=Team.ROLES_ORDER)
 
     def build_figure(self, match: Match):
-        data=self.fetch_data(match)
-        x=np.arange(len(Team.ROLES_ORDER)); width=0.35
-        fig,ax=plt.subplots(figsize=(8,5))
-        ax.bar(x-width/2,data.blue,width,label="Blue",color="tab:blue")
-        ax.bar(x+width/2,data.red ,width,label="Red" ,color="tab:red")
-        ax.set_xticks(x); ax.set_xticklabels(Team.ROLES_ORDER)
-        ax.set_ylabel("Normalized Gold Share")
-        ax.set_ylim(0,1)
-        ax.set_title("Gold Contribution per Role (Normalized per Team)")
-        ax.legend(); fig.tight_layout()
+        data = self.fetch_data(match)
+        fig, ax = plt.subplots(figsize=(6, 6))
+
+        bars_x = {"blue": -0.2, "red": 0.2}
+        for side, x in bars_x.items():
+            bottom = 0
+            shares = data[side]
+            for role, share in zip(Team.ROLES_ORDER, shares):
+                ax.bar(
+                    x,
+                    share,
+                    width=0.35,
+                    bottom=bottom,
+                    color=ROLE_COLORS.get(role, "#999"),
+                    edgecolor="white",
+                    linewidth=0.5,
+                    label=role if side == "blue" else None,
+                )
+                ax.text(
+                    x,
+                    bottom + share / 2,
+                    f"{share*100:,.0f}%",
+                    ha="center",
+                    va="center",
+                    fontsize=8,
+                    color="#1f1f1f",
+                )
+                bottom += share
+
+        ax.set_xlim(-0.6, 0.6)
+        ax.set_ylim(0, 1)
+        ax.set_xticks([bars_x["blue"], bars_x["red"]], ["Blue", "Red"])
+        ax.set_ylabel("Share of team gold (sums to 100%)")
+        ax.set_title("Gold Contribution – Stacked by Role")
+        ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+        ax.legend(title="Role", loc="upper right")
+        fig.tight_layout()
         return fig
 
 

@@ -17,6 +17,13 @@ from .base_viz import ABCViz
 from core.entities import Match, Team
 import json, numpy as np, pandas as pd, matplotlib.pyplot as plt
 
+METRICS = [
+    ("gold", "Gold", 20000),
+    ("damage", "Damage", 30000),
+    ("vision", "Vision", 60),
+    ("kda", "KDA", 6),
+]
+
 class SpiderStats(ABCViz):
     """Team‑comparison spider chart."""
 
@@ -35,8 +42,15 @@ class SpiderStats(ABCViz):
                     continue
                 stats = [json.loads(j[0]) for j in rows]
                 df = pd.DataFrame(stats)
-                avgs = df[["gold","kills","deaths","assists","damage","vision"]].mean()
-                recs.append(avgs)
+                if df.empty:
+                    continue
+                summary = pd.Series({
+                    "gold": df["gold"].mean(),
+                    "damage": df["damage"].mean(),
+                    "vision": df["vision"].mean(),
+                    "kda": (df["kills"].mean() + df["assists"].mean()) / max(1, df["deaths"].mean()),
+                })
+                recs.append(summary)
             if not recs:
                 return pd.Series(dtype=float)
             team_avg = pd.concat(recs, axis=1).mean(axis=1)
@@ -55,26 +69,42 @@ class SpiderStats(ABCViz):
             print("❌ No data to plot for SpiderStats.")
             return None
 
-        metrics = data.index.tolist()
-        n = len(metrics)
+        for metric, _, _ in METRICS:
+            if metric not in data.index:
+                data.loc[metric] = 0
+
+        ordered = data.loc[[m[0] for m in METRICS]]
+        normed = ordered.copy()
+        for metric, _, max_val in METRICS:
+            normed.loc[metric] = ordered.loc[metric] / max_val if max_val else ordered.loc[metric]
+        normed = normed.clip(lower=0, upper=1)
+
+        n = len(METRICS)
         angles = np.linspace(0, 2*np.pi, n, endpoint=False).tolist()
-        angles += angles[:1]  # close circle
+        angles += angles[:1]
 
-        # compute values
-        values_blue = data.loc[:, "blue"].tolist()
-        values_red  = data.loc[:, "red"].tolist()
-        values_blue += values_blue[:1]
-        values_red  += values_red[:1]
+        def _vals(side):
+            values = normed.loc[:, side].tolist()
+            values += values[:1]
+            return values
 
-        fig = plt.figure(figsize=(6,6))
+        fig = plt.figure(figsize=(6, 6))
         ax = fig.add_subplot(111, polar=True)
-        ax.plot(angles, values_blue, color="tab:blue", linewidth=2, label="Blue Team")
-        ax.fill(angles, values_blue, color="tab:blue", alpha=0.25)
-        ax.plot(angles, values_red,  color="tab:red", linewidth=2, label="Red Team")
-        ax.fill(angles, values_red,  color="tab:red", alpha=0.25)
-        ax.set_thetagrids(np.degrees(angles[:-1]), metrics)
-        ax.legend(loc="upper right", bbox_to_anchor=(1.1, 1.1))
-        ax.set_title("Team Performance Comparison", fontsize=13, pad=20)
+        ax.set_theta_offset(np.pi / 4)
+        ax.set_theta_direction(-1)
+
+        vals_blue = _vals("blue")
+        vals_red = _vals("red")
+        ax.plot(angles, vals_blue, color="tab:blue", linewidth=2, label="Blue team")
+        ax.fill(angles, vals_blue, color="tab:blue", alpha=0.2)
+        ax.plot(angles, vals_red, color="tab:red", linewidth=2, label="Red team")
+        ax.fill(angles, vals_red, color="tab:red", alpha=0.2)
+
+        ax.set_thetagrids(np.degrees(angles[:-1]), [label for _, label, _ in METRICS], fontsize=11)
+        ax.set_rgrids([0.25, 0.5, 0.75, 1.0], angle=-45, fontsize=8)
+        ax.set_ylim(0, 1)
+        ax.set_title("Spider Stats – Normalized Team Profile", fontsize=13, pad=18)
+        ax.legend(loc="upper right", bbox_to_anchor=(1.15, 1.1))
         fig.tight_layout()
         return fig
 
