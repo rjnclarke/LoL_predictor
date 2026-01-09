@@ -3,6 +3,7 @@ import asyncio
 from typing import Dict
 
 from crawler.match_base import MatchBase
+from crawler.db_handler import DatabaseHandler
 
 
 def fetch_stats(match_base: MatchBase) -> Dict[str, int]:
@@ -44,7 +45,7 @@ async def main():
     parser = argparse.ArgumentParser(description="Run MatchBase updates with stats.")
     parser.add_argument(
         "--db",
-        default="data/live.db",
+        default="data/match_base/live.db",
         help="Path to the live database (default: data/live.db)",
     )
     parser.add_argument(
@@ -66,10 +67,27 @@ async def main():
     before = fetch_stats(mb)
     print_summary("Database snapshot (before)", before)
 
+    print("\n📀 Copying live → update DB...")
+    mb.copy_live_db()
+
+    # Switch MatchBase to operate on the update DB copy
+    mb.db.conn.close()
+    mb.db = DatabaseHandler(args.update_db)
+
+    print("⚙️  Updating players on update DB...")
     await mb.update_all_players(limit=args.limit)
 
     after = fetch_stats(mb)
     print_deltas(before, after)
+
+    # Promote the freshly updated DB back to the live location
+    print("\n🚀 Promoting update DB → live DB...")
+    mb.db.conn.close()
+    mb.promote_update_db()
+    mb.db = DatabaseHandler(args.db)
+
+    final_stats = fetch_stats(mb)
+    print_summary("Database snapshot (after promote)", final_stats)
 
 
 if __name__ == "__main__":

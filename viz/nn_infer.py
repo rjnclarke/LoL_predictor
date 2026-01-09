@@ -1,13 +1,8 @@
-"""
-viz/nn_infer.py
-===============
-
-Provides utilities to build model input tensors from the
-live visualization database and run predictions using the
-MatchAttnMoEModel stored in weights/moeT_003.pt.
-"""
+"""Model inference helpers + visualization."""
 
 import json, torch, pandas as pd, numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Wedge
 from core.entities import Team, Match
 from ml.models.moe_transformer import MatchAttnMoEModel
 
@@ -114,14 +109,74 @@ def load_model(weights_path="weights/moeT_003.pt", device=None):
 @torch.no_grad()
 def predict_match_outcome(match_base, match: Match,
                           model_path="weights/moeT_003.pt"):
-    """
-    Build input tensor from Match and return the model prediction score.
-    """
-    X = build_match_tensor(match_base, match).unsqueeze(0)  # [1,10,13]
+    """Return raw regression output plus clipped blue/red success scores."""
+    X = build_match_tensor(match_base, match).unsqueeze(0)
     model, device = load_model(model_path)
     X = X.to(device)
     y_pred = model(X)
-    return float(y_pred.squeeze().cpu().item())
+    raw = float(y_pred.squeeze().cpu().item())
+    blue_success = float(np.clip(raw, 0.0, 1.0))
+    return {
+        "raw": raw,
+        "blue_success": blue_success,
+        "red_success": 1.0 - blue_success,
+    }
+
+
+def build_speedometer(blue_success: float):
+    """Render a horizontal split bar (blue vs red share)."""
+    blue_success = float(np.clip(blue_success, 0.0, 1.0))
+    red_success = 1.0 - blue_success
+
+    fig, ax = plt.subplots(figsize=(6.5, 1.6))
+    ax.barh(
+        [0],
+        [blue_success],
+        color="#2563eb",
+        edgecolor="white",
+        linewidth=1.5,
+    )
+    ax.barh(
+        [0],
+        [red_success],
+        left=blue_success,
+        color="#dc2626",
+        edgecolor="white",
+        linewidth=1.5,
+    )
+    ax.axvline(0.5, color="#f8fafc", linestyle="--", linewidth=1)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(-0.6, 0.6)
+    ax.set_yticks([])
+    ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
+    ax.set_xticklabels(["0%", "25%", "50%", "75%", "100%"], color="#e2e8f0")
+    ax.set_xlabel("Blue share →", color="#e2e8f0", fontsize=10)
+    ax.set_facecolor("#0f172a")
+    fig.patch.set_facecolor("#0f172a")
+    ax.text(
+        blue_success / 2,
+        0.05,
+        f"Blue {blue_success*100:,.1f}%",
+        ha="center",
+        va="center",
+        color="#e0f2fe",
+        fontsize=11,
+        fontweight="bold",
+    )
+    ax.text(
+        blue_success + red_success / 2,
+        0.05,
+        f"Red {red_success*100:,.1f}%",
+        ha="center",
+        va="center",
+        color="#fee2e2",
+        fontsize=11,
+        fontweight="bold",
+    )
+    ax.set_title("Model inference (blue ↔ red success)", color="#f1f5f9", fontsize=12)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    return fig
 
 
 # ----------------------------------------------------------- #
@@ -137,5 +192,9 @@ if __name__ == "__main__":
     red  = Team([Player(p) for p in puuids[5:10]])
     match = Match(blue, red)
 
-    pred = predict_match_outcome(mb, match)
-    print(f"Predicted match outcome score: {pred:.4f}")
+    result = predict_match_outcome(mb, match)
+    print(
+        f"Raw score: {result['raw']:.4f} | Blue success {result['blue_success']*100:,.2f}%"
+    )
+    gauge = build_speedometer(result["blue_success"])
+    plt.show()
