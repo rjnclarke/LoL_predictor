@@ -1,8 +1,0 @@
-{
-  "run": "moeDeepT.1_001",
-  "batch_size": 16,
-  "lr": 0.0004,
-  "weight_decay": 0.0003,
-  "best_val": 0.05119929792816767,
-  "epochs": 25
-}

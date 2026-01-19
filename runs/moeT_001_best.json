@@ -1,8 +1,0 @@
-{
-  "run": "moeT_001",
-  "batch_size": 16,
-  "lr": 0.005,
-  "weight_decay": 0.0,
-  "best_val": 0.050875865302221504,
-  "epochs": 24
-}

@@ -219,3 +219,8 @@ weights
 runs/
 runs
 run_log
+
+.env
+.env/
+weights/
+weights
