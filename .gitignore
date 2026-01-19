@@ -224,3 +224,5 @@ run_log
 .env/
 weights/
 weights
+runs/
+runs
